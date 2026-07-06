@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>모세혈관 유체 수송 및 에너지 시뮬레이터</title>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --secondary: #3498db;
+            --accent: #e74c3c;
+            --bg: #f8f9fa;
+        }
+        body {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #ebedef;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .dashboard {
+            display: grid;
+            grid-template-columns: 350px 500px;
+            gap: 20px;
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        h2 { grid-column: span 2; text-align: center; color: var(--primary); margin-top: 0; margin-bottom: 10px;}
+        .subtitle { grid-column: span 2; text-align: center; color: #7f8c8d; font-size: 0.9em; margin-bottom: 20px; }
+        
+        /* 제어 패널 */
+        .controls { display: flex; flex-direction: column; gap: 15px; }
+        .control-group { background: var(--bg); padding: 15px; border-radius: 10px; border-left: 4px solid var(--secondary); }
+        .control-group h3 { margin: 0 0 10px 0; font-size: 1em; color: var(--primary); }
+        
+        .btn-group { display: flex; gap: 5px; margin-bottom: 10px; }
+        button { flex: 1; padding: 8px; border: 1px solid #ddd; background: white; border-radius: 5px; cursor: pointer; transition: 0.2s; font-size: 0.85em; font-weight: bold;}
+        button:hover { background: #eee; }
+        button.active { background: var(--secondary); color: white; border-color: var(--secondary); }
+        
+        .temp-btn.ice { border-color: #3498db; color: #3498db; }
+        .temp-btn.room { border-color: #2ecc71; color: #2ecc71; }
+        .temp-btn.hot { border-color: #e74c3c; color: #e74c3c; }
+        .temp-btn.active.ice { background: #3498db; color: white; }
+        .temp-btn.active.room { background: #2ecc71; color: white; }
+        .temp-btn.active.hot { background: #e74c3c; color: white; }
+
+        label { display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 5px; font-weight: bold;}
+        input[type="range"] { width: 100%; cursor: pointer; }
+        .hint { font-size: 0.75em; color: #7f8c8d; margin-top: 5px; display: block; }
+
+        /* 시각화 및 결과 패널 */
+        .visual-panel { display: flex; flex-direction: column; gap: 15px; }
+        canvas { background: #fff4e6; border-radius: 10px; border: 1px solid #ddd; width: 100%; height: 300px; box-shadow: inset 0 0 10px rgba(0,0,0,0.05); }
+        
+        .results { background: var(--primary); color: white; padding: 20px; border-radius: 10px; text-align: center; }
+        .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .data-box { background: rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; }
+        .data-title { font-size: 0.8em; color: #bdc3c7; }
+        .data-value { font-size: 1.5em; font-weight: bold; margin-top: 5px; color: #f1c40f; }
+        .energy-value { font-size: 1.8em; color: #e74c3c; }
+        .health-status { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; font-size: 0.95em; line-height: 1.4;}
+    </style>
+</head>
+<body>
+
+<div class="dashboard">
+    <h2>모세혈관 유체 수송 & 에너지 시뮬레이터</h2>
+    <div class="subtitle">Poiseuille's Law 및 유체 역학 기반 혈류 애니메이션 및 압력 계산</div>
+
+    <!-- 좌측 제어 패널 -->
+    <div class="controls">
+        <div class="control-group">
+            <h3>1. 모세혈관 형태 선택 (구조적 저항)</h3>
+            <div class="btn-group" id="shape-btns">
+                <button class="active" onclick="setShape('U', 1.0, this)">U자형 (정상)</button>
+                <button onclick="setShape('tortuous', 1.5, this)">구불구불 (비정상)</button>
+                <button onclick="setShape('bushy', 3.0, this)">수풀형 (뭉침)</button>
+            </div>
+            <span class="hint">형태가 복잡할수록 마찰에 의한 에너지 손실 계수가 증가합니다.</span>
+        </div>
+
+        <div class="control-group">
+            <h3>2. 온도 환경 퀵 세팅 (반경 조절)</h3>
+            <div class="btn-group" id="temp-btns">
+                <button class="temp-btn ice" onclick="setTemp('ice', 3.0, this)">🧊 아이스팩 (1분)</button>
+                <button class="temp-btn room active" onclick="setTemp('room', 5.0, this)">🌡️ 실온 (안정)</button>
+                <button class="temp-btn hot" onclick="setTemp('hot', 7.5, this)">🔥 40℃ 팩 (1분)</button>
+            </div>
+            <span class="hint">실험 데이터에 기반한 혈관 수축/확장을 즉시 시뮬레이션합니다.</span>
+        </div>
+
+        <div class="control-group">
+            <h3>3. 물리적 변인 미세 조절</h3>
+            <label>혈관 반경 (Radius) <span id="radVal">5.0 μm</span></label>
+            <input type="range" id="radius" min="2.0" max="10.0" step="0.1" value="5.0" oninput="updateValues()">
+            
+            <label style="margin-top: 15px;">혈액 점성도 (Viscosity) <span id="viscVal">4.0 cP</span></label>
+            <input type="range" id="viscosity" min="2.0" max="8.0" step="0.1" value="4.0" oninput="updateValues()">
+        </div>
+    </div>
+
+    <!-- 우측 시각화 & 결과 패널 -->
+    <div class="visual-panel">
+        <canvas id="vesselCanvas" width="500" height="300"></canvas>
+        
+        <div class="results">
+            <div class="result-grid">
+                <div class="data-box">
+                    <div class="data-title">현재 혈류 속도</div>
+                    <div class="data-value"><span id="speedOut">0.60</span> mm/s</div>
+                </div>
+                <div class="data-box" style="border: 1px solid #e74c3c;">
+                    <div class="data-title">심장 펌프질 필요 에너지(ΔP)</div>
+                    <div class="data-value energy-value"><span id="energyOut">100</span> %</div>
+                </div>
+            </div>
+            <div class="health-status">
+                <strong style="color: #34db98;">[예상 건강 및 유체 수송 상태]</strong><br>
+                <span id="healthText">정상: 이상적인 유체 수송 효율을 보입니다.</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 설정 및 변수 ---
+    const canvas = document.getElementById('vesselCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    let currentShape = 'U'; // 'U', 'tortuous', 'bushy'
+    let shapeFactor = 1.0;  // 형태에 따른 저항 가중치
+    let particles = [];
+    for(let i=0; i<80; i++) particles.push({ t: Math.random() }); // 혈구 입자
+
+    // DOM 요소
+    const radInput = document.getElementById('radius');
+    const visInput = document.getElementById('viscosity');
+    const radVal = document.getElementById('radVal');
+    const visVal = document.getElementById('viscVal');
+    const speedOut = document.getElementById('speedOut');
+    const energyOut = document.getElementById('energyOut');
+    const healthText = document.getElementById('healthText');
+
+    // 기준 값 (실온, U자형)
+    const baseRadius = 5.0;
+    const baseViscosity = 4.0;
+    const baseSpeed = 0.6; // mm/s
+
+    // --- 버튼 제어 함수 ---
+    function setShape(shape, factor, btn) {
+        currentShape = shape;
+        shapeFactor = factor;
+        document.querySelectorAll('#shape-btns button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        updateValues();
+    }
+
+    function setTemp(type, radiusTarget, btn) {
+        radInput.value = radiusTarget;
+        document.querySelectorAll('#temp-btns button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        updateValues();
+    }
+
+    // --- 수식 계산 및 상태 업데이트 ---
+    function updateValues() {
+        let r = parseFloat(radInput.value);
+        let v = parseFloat(visInput.value);
+
+        radVal.innerText = r.toFixed(1) + " μm";
+        visVal.innerText = v.toFixed(1) + " cP";
+
+        // 1. 에너지 소모율 계산 (Poiseuille's Law 응용: ΔP ∝ (η * L_factor) / r^4)
+        let baseResistance = baseViscosity / Math.pow(baseRadius, 4);
+        let currentResistance = (v * shapeFactor) / Math.pow(r, 4);
+        let energyRatio = (currentResistance / baseResistance) * 100;
+        
+        // 2. 혈류 속도 계산 (저항에 반비례한다고 가정)
+        let speed = baseSpeed * (baseResistance / currentResistance);
+
+        // UI 업데이트
+        energyOut.innerText = energyRatio > 999 ? "MAX" : energyRatio.toFixed(1);
+        speedOut.innerText = speed.toFixed(2);
+
+        // 3. 건강 상태 판정 (실험 데이터 반영)
+        let status = "";
+        let color = "#fff";
+        
+        if (speed < 0.2) {
+            status = "비정상 (저하): 혈액 정체 및 말초순환 장애 위험. 에너지 저항이 극심합니다.";
+            color = "#e74c3c";
+        } else if (speed >= 0.2 && speed < 0.4) {
+            status = "경계 (수축): 혈관이 수축하여 에너지 수송 효율이 떨어집니다. (냉각 자극 시 정상 반응)";
+            color = "#f1c40f";
+        } else if (speed >= 0.4 && speed <= 1.0) {
+            status = "정상 범위: 미세순환이 원활하며, 이상적인 에너지 효율을 보입니다.";
+            color = "#2ecc71";
+        } else {
+            status = "경계/비정상 (확장/과다): 혈관이 크게 확장되었습니다. (온열 자극 시 정상 반응)";
+            color = "#f1c40f";
+        }
+
+        if (shapeFactor > 1.0) status += `<br>⚠️ 형태 변형으로 인한 추가 에너지 손실 발생 중!`;
+
+        healthText.innerHTML = status;
+        healthText.style.color = color;
+    }
+
+    // --- 캔버스 렌더링 (애니메이션) ---
+    function getPathPoint(t) {
+        // t는 0에서 1사이의 값. 캔버스 위에서의 좌표(x, y) 반환
+        let x, y;
+        let startX = 100, endX = 400;
+        let baseY = 50, depth = 220;
+
+        // 기본 U자형 뼈대
+        x = startX + (endX - startX) * t;
+        y = baseY + Math.sin(t * Math.PI) * depth;
+
+        // 형태에 따른 노이즈 추가
+        if (currentShape === 'tortuous') {
+            x += Math.sin(t * Math.PI * 6) * 15;
+            y += Math.cos(t * Math.PI * 6) * 15;
+        } else if (currentShape === 'bushy') {
+            // 중앙 부근에서 심하게 뭉침
+            let isCenter = Math.sin(t * Math.PI); 
+            x += Math.sin(t * Math.PI * 15) * 30 * isCenter;
+            y += Math.cos(t * Math.PI * 20) * 30 * isCenter;
+        }
+        return {x, y};
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        let r = parseFloat(radInput.value);
+        let v = parseFloat(visInput.value);
+        let currentSpeed = parseFloat(speedOut.innerText);
+
+        // 1. 혈관(파이프) 그리기
+        ctx.beginPath();
+        for(let t=0; t<=1; t+=0.01) {
+            let pt = getPathPoint(t);
+            if(t===0) ctx.moveTo(pt.x, pt.y);
+            else ctx.lineTo(pt.x, pt.y);
+        }
+        // 점성에 따른 색상 변화 (끈적일수록 진한 붉은색)
+        let redHue = Math.min(255, 200 + (v * 10));
+        let alpha = 0.5 + (v / 20);
+        ctx.strokeStyle = `rgba(${redHue}, 50, 50, ${alpha})`;
+        ctx.lineWidth = r * 3; // 반경에 비례한 두께
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+
+        // 2. 혈구 입자 애니메이션
+        ctx.fillStyle = '#ffcccc';
+        particles.forEach(p => {
+            let pt = getPathPoint(p.t);
+            
+            // 입자 흩뿌림 효과 (혈관 두께 안에서)
+            let offset = (Math.random() - 0.5) * (r * 2);
+            
+            ctx.beginPath();
+            ctx.arc(pt.x + offset, pt.y + offset, r * 0.5, 0, Math.PI*2);
+            ctx.fill();
+
+            // 속도에 맞춰 이동 (속도가 빠를수록 t가 빨리 증가)
+            // 화면 픽셀 스케일링 보정
+            p.t += (currentSpeed * 0.005); 
+            if (p.t > 1) p.t = 0; // 끝에 도달하면 다시 처음으로
+        });
+
+        requestAnimationFrame(draw);
+    }
+
+    // 초기화
+    updateValues();
+    draw();
+</script>
+
+</body>
+</html>
