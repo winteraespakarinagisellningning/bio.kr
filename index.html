@@ -227,12 +227,27 @@
             x += Math.sin(t * Math.PI * 6) * 15;
             y += Math.cos(t * Math.PI * 6) * 15;
         } else if (currentShape === 'bushy') {
-            // 중앙 부근에서 심하게 뭉침
             let isCenter = Math.sin(t * Math.PI); 
             x += Math.sin(t * Math.PI * 15) * 30 * isCenter;
             y += Math.cos(t * Math.PI * 20) * 30 * isCenter;
         }
         return {x, y};
+    }
+
+    // 우측 상단에 뛸 심장을 그리는 함수
+    function drawHeart(ctx, x, y, size, scale, alpha) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(scale, scale);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.bezierCurveTo(0, -size/2, -size, -size/2, -size, 0);
+        ctx.bezierCurveTo(-size, size/2, 0, size, 0, size);
+        ctx.bezierCurveTo(0, size, size, size/2, size, 0);
+        ctx.bezierCurveTo(size, -size/2, 0, -size/2, 0, 0);
+        ctx.fillStyle = `rgba(231, 76, 60, ${alpha})`;
+        ctx.fill();
+        ctx.restore();
     }
 
     function draw() {
@@ -242,6 +257,11 @@
         let v = parseFloat(visInput.value);
         let currentSpeed = parseFloat(speedOut.innerText);
 
+        // --- 공통 리듬 (맥동파) 생성 ---
+        let time = Date.now() / 1000;
+        // 박동 리듬 (0 ~ 1 사이로 강하게 펌핑)
+        let beat = Math.pow(Math.sin(time * Math.PI * 1.2), 6); 
+        
         // 1. 혈관(파이프) 그리기
         ctx.beginPath();
         for(let t=0; t<=1; t+=0.01) {
@@ -249,47 +269,43 @@
             if(t===0) ctx.moveTo(pt.x, pt.y);
             else ctx.lineTo(pt.x, pt.y);
         }
-        // 점성에 따른 색상 변화 (끈적일수록 진한 붉은색)
         let redHue = Math.min(255, 200 + (v * 10));
-        let alpha = 0.5 + (v / 20);
-        ctx.strokeStyle = `rgba(${redHue}, 50, 50, ${alpha})`;
-        ctx.lineWidth = r * 3; // 반경에 비례한 두께
+        let vesselAlpha = 0.5 + (v / 20);
+        ctx.strokeStyle = `rgba(${redHue}, 50, 50, ${vesselAlpha})`;
+        ctx.lineWidth = r * 3;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         ctx.stroke();
 
-dfsldkfjsldkfjsldf s """"""
-        // 2. 혈구 입자 애니메이션
+        // 2. 우측 상단 박동하는 심장 그리기
+        // 속도가 너무 낮으면 심장 박동(스케일)도 약해지도록 처리
+        let heartScale = 1 + (currentSpeed > 0.1 ? beat * 0.3 : 0.05);
+        let heartAlpha = currentSpeed > 0.1 ? 0.9 : 0.3; // 정체 상태면 심장도 흐릿해짐
+        drawHeart(ctx, 450, 40, 15, heartScale, heartAlpha);
+
+        // 3. 혈구 입자 애니메이션 (심장 리듬에 완벽히 동기화)
         ctx.fillStyle = '#ffcccc';
-        
-        // [수정1] 심장 박동 모방 로직 (현재 시간에 기반한 맥동파 생성)
-        let time = Date.now() / 1000;
-        // 맥동 효과: 확 밀어주고 멈칫하는 심장 펌프질 느낌 (sin 함수의 짝수 제곱 활용)
-        let pulse = Math.pow(Math.sin(time * Math.PI * 1.2), 6) * 3; 
+        let pulse = beat * 3; // 유체를 밀어내는 힘 가중치
 
         particles.forEach(p => {
             let pt = getPathPoint(p.t);
-            
-            // 입자 흩뿌림 효과 (혈관 두께 안에서)
             let offset = (Math.random() - 0.5) * (r * 2);
             
             ctx.beginPath();
             ctx.arc(pt.x + offset, pt.y + offset, r * 0.5, 0, Math.PI*2);
             ctx.fill();
 
-            // [수정2] 속도 변화를 확실하게 보여주기 위한 가중치(0.008) 및 심장 박동(pulse) 적용
+            // 맥동(pulse)과 현재 계산된 속도(currentSpeed)를 곱해 이동량 결정
             let moveAmount = currentSpeed * pulse * 0.008;
             
-            // 완전히 정지해야 할 때 (속도가 0.1 이하로 극도로 낮아지면 완전히 0으로 고정)
+            // 속도가 0.1 이하로 극도로 낮아지면 0으로 고정하여 멈추게 함
             if (currentSpeed <= 0.1) {
                 moveAmount = 0;
             }
 
-            // 속도에 맞춰 이동
             p.t += moveAmount; 
-            if (p.t > 1) p.t = 0; // 끝에 도달하면 다시 처음으로
+            if (p.t > 1) p.t = 0;
         });
-"""""""dslfjsldfjslf
 
         requestAnimationFrame(draw);
     }
