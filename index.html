@@ -53,7 +53,7 @@
         input[type="range"] { width: 100%; cursor: pointer; }
         .hint { font-size: 0.75em; color: #7f8c8d; margin-top: 5px; display: block; }
 
-        /* 시각화 및 결과 널 */
+        /* 시각화 및 결과 패널 */
         .visual-panel { display: flex; flex-direction: column; gap: 15px; }
         canvas { background: #fff4e6; border-radius: 10px; border: 1px solid #ddd; width: 100%; height: 300px; box-shadow: inset 0 0 10px rgba(0,0,0,0.05); }
         
@@ -258,8 +258,15 @@
         ctx.lineJoin = 'round';
         ctx.stroke();
 
+dfsldkfjsldkfjsldf s """"""
         // 2. 혈구 입자 애니메이션
         ctx.fillStyle = '#ffcccc';
+        
+        // [수정1] 심장 박동 모방 로직 (현재 시간에 기반한 맥동파 생성)
+        let time = Date.now() / 1000;
+        // 맥동 효과: 확 밀어주고 멈칫하는 심장 펌프질 느낌 (sin 함수의 짝수 제곱 활용)
+        let pulse = Math.pow(Math.sin(time * Math.PI * 1.2), 6) * 3; 
+
         particles.forEach(p => {
             let pt = getPathPoint(p.t);
             
@@ -270,11 +277,19 @@
             ctx.arc(pt.x + offset, pt.y + offset, r * 0.5, 0, Math.PI*2);
             ctx.fill();
 
-            // 속도에 맞춰 이동 (속도가 빠를수록 t가 빨리 증가)
-            // 화면 픽셀 스케일링 보정
-            p.t += (currentSpeed * 0.005); 
+            // [수정2] 속도 변화를 확실하게 보여주기 위한 가중치(0.008) 및 심장 박동(pulse) 적용
+            let moveAmount = currentSpeed * pulse * 0.008;
+            
+            // 완전히 정지해야 할 때 (속도가 0.1 이하로 극도로 낮아지면 완전히 0으로 고정)
+            if (currentSpeed <= 0.1) {
+                moveAmount = 0;
+            }
+
+            // 속도에 맞춰 이동
+            p.t += moveAmount; 
             if (p.t > 1) p.t = 0; // 끝에 도달하면 다시 처음으로
         });
+"""""""dslfjsldfjslf
 
         requestAnimationFrame(draw);
     }
